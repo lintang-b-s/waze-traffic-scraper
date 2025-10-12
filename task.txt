@@ -1,0 +1,2 @@
+curl -s "https://www.waze.com/live-map/api/georss?top=-7.333734137484932&bottom=-8.242351967398633&left=109.97046661376955&right=111.03256988525392&env=row&types=traffic" | jq . > waze_response_[curdatetime].json
+
