@@ -173,7 +173,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 		return err
 	}
 	// metadata
-	return sc.writeTrafficSpeedDataToCSV(affectedWays, metadataCsvFilePath)
+	return sc.writeMetadataToCSV(affectedWays, metadataCsvFilePath)
 }
 func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTrafficData, trafficCsvFilePath string) error {
 	var headers []string
