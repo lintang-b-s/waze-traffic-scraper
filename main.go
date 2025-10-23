@@ -27,13 +27,13 @@ func main() {
 	osmParser := osmparser.NewOSMParserV2()
 	wazeUrl := fmt.Sprintf(`https://www.waze.com/live-map/api/georss?top=%.4f&bottom=%.4f&&left=%.4f&&right=%.4f&&env=row&types=traffic`, *bbTopLat, *bbBottomLat, *bbBottomLon, *bbTopLon)
 
-	arcs := osmParser.Parse("./data/diy_solo_semarang.osm.pbf", logger)
+	arcs, waySpeed := osmParser.Parse("./data/diy_solo_semarang.osm.pbf", logger)
 	rt := spatialindex.NewRtree()
 	rt.Build(arcs, 0.05, logger)
-	scp := scraper.NewScraper(5000*time.Millisecond, 3*time.Millisecond, 81*time.Millisecond, 20*time.Second,
-		10*time.Millisecond, 2, wazeUrl, 5, rt, logger)
-	err =  scp.ScrapePeriodically("./data/waze_traffic_diy_solo_semarang", "./data/waze_metadata_diy_solo_semarang")
+	scp := scraper.NewScraper(3000*time.Millisecond, 3*time.Millisecond, 81*time.Millisecond, 20*time.Second,
+		10*time.Millisecond, 2, wazeUrl, 5, rt, logger, waySpeed)
+	err = scp.ScrapePeriodically("./data/waze_traffic_diy_solo_semarang.csv", "./data/waze_metadata_diy_solo_semarang.csv")
 	if err != nil {
-		panic(err )
+		panic(err)
 	}
 }

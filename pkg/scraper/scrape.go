@@ -32,10 +32,11 @@ type Scraper struct {
 	retryCount            int
 	rt                    *spatialindex.Rtree
 	log                   *zap.Logger
+	osmWayDefaultSpeed    map[int64]float64
 }
 
 func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitterInterval time.Duration,
-	exponentFactor float64, url string, retryCount int, rt *spatialindex.Rtree, log *zap.Logger) *Scraper {
+	exponentFactor float64, url string, retryCount int, rt *spatialindex.Rtree, log *zap.Logger, waySpeed map[int64]float64) *Scraper {
 	return &Scraper{
 		initialTimeout:        initialTimeout,
 		maxTimeout:            maxTimeout,
@@ -46,6 +47,8 @@ func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitte
 		retryCount:            retryCount,
 		rt:                    rt,
 		log:                   log,
+		osmWayDefaultSpeed:    waySpeed,
+		period:                period,
 	}
 }
 
@@ -141,7 +144,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 		}
 		for _, coord := range jam.Line {
 			edges := sc.rt.SearchWithinRadius(coord.Longitude, coord.Latitude,
-				1.0)
+				0.1)
 			if len(edges) == 0 {
 				continue
 			}
@@ -175,6 +178,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 	// metadata
 	return sc.writeMetadataToCSV(affectedWays, metadataCsvFilePath)
 }
+
 func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTrafficData, trafficCsvFilePath string) error {
 	var headers []string
 	var records [][]string
@@ -198,7 +202,6 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 		headers = records[0]
 	} else {
 		headers = []string{"timestamp"}
-
 	}
 
 	for osmWayId := range affectedWays {
@@ -224,7 +227,7 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 		if speed, ok := affectedWays[osmWayId]; ok {
 			row[i] = fmt.Sprintf("%.2f", speed.getSpeed())
 		} else {
-			row[i] = ""
+			row[i] = fmt.Sprintf("%.2f", sc.osmWayDefaultSpeed[osmWayId])
 		}
 	}
 
@@ -241,7 +244,24 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 	if err := w.Write(headers); err != nil {
 		return err
 	}
-	for _, rec := range records[1:] {
+	startId := 0
+	if len(records) > 1 {
+		startId = 1
+	}
+	for _, rec := range records[startId:] {
+		if len(row) > len(rec) {
+			oldId := len(rec)
+			rec = append(rec, make([]string, len(row)-len(rec))...)
+
+			for i := oldId; i < len(row); i++ {
+				// isi pakai default speed value...
+				h := headers[i]
+				osmWayId, _ := strconv.ParseInt(h, 10, 64)
+				rec[i] = fmt.Sprintf("%.2f", sc.osmWayDefaultSpeed[osmWayId])
+			}
+
+		}
+
 		if err := w.Write(rec); err != nil {
 			return err
 		}

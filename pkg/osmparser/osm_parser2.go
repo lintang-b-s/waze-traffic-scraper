@@ -67,7 +67,7 @@ func (o *OsmParser) GetTagStringIdMap() util.IDMap {
 	return o.tagStringIdMap
 }
 
-func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) []datastructure.Edge {
+func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) ([]datastructure.Edge, map[int64]float64) {
 
 	f, err := os.Open(mapFile)
 
@@ -75,6 +75,8 @@ func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) []datastructure.Ed
 		log.Fatal(err)
 	}
 	defer f.Close()
+
+	waySpeed := make(map[int64]float64)
 
 	scanner := osmpbf.New(context.Background(), f, 0)
 	// must not be parallel
@@ -224,7 +226,11 @@ func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) []datastructure.Ed
 		}
 	}
 
-	return scannedEdges
+	for _, edge := range scannedEdges {
+		waySpeed[edge.GetOsmWayId()] = edge.GetSpeed()
+	}
+
+	return scannedEdges, waySpeed
 }
 
 type wayExtraInfo struct {
@@ -502,6 +508,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 				false,
 				id,
 				wayExtraInfoData.highwayType,
+				speed,
 			))
 
 		} else {
@@ -518,6 +525,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 				false,
 				id,
 				wayExtraInfoData.highwayType,
+				speed,
 			))
 		}
 	} else {
@@ -534,6 +542,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 			false,
 			id,
 			wayExtraInfoData.highwayType,
+			speed,
 		))
 
 	}
