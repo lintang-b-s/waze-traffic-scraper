@@ -33,10 +33,12 @@ type Scraper struct {
 	rt                    *spatialindex.Rtree
 	log                   *zap.Logger
 	osmWayDefaultSpeed    map[int64]float64
+	streetIdMap           *util.IDMap
 }
 
 func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitterInterval time.Duration,
-	exponentFactor float64, url string, retryCount int, rt *spatialindex.Rtree, log *zap.Logger, waySpeed map[int64]float64) *Scraper {
+	exponentFactor float64, url string, retryCount int, rt *spatialindex.Rtree, log *zap.Logger, waySpeed map[int64]float64,
+	streetIdMap *util.IDMap) *Scraper {
 	return &Scraper{
 		initialTimeout:        initialTimeout,
 		maxTimeout:            maxTimeout,
@@ -49,6 +51,7 @@ func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitte
 		log:                   log,
 		osmWayDefaultSpeed:    waySpeed,
 		period:                period,
+		streetIdMap:           streetIdMap,
 	}
 }
 
@@ -144,7 +147,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 		}
 		for _, coord := range jam.Line {
 			edges := sc.rt.SearchWithinRadius(coord.Longitude, coord.Latitude,
-				0.1)
+				0.15) // 150 meters radius
 			if len(edges) == 0 {
 				continue
 			}
@@ -165,7 +168,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 			nearestEdge := edgeDists[0].getEdge()
 			affectedWays[nearestEdge.GetOsmWayId()] = NewOsmWayTrafficData(
 				nearestEdge.GetOsmWayId(), float64(jam.SpeedKMH),
-				jam.Street, jam.City, jam.EndNode,
+				jam.Street, jam.City, jam.EndNode, sc.streetIdMap.GetStr(nearestEdge.GetStreet()),
 			)
 		}
 	}
@@ -309,7 +312,7 @@ func (sc *Scraper) writeMetadataToCSV(affectedWays map[int64]osmwayTrafficData, 
 	defer w.Flush()
 
 	if !fileExists {
-		if err := w.Write([]string{"osm_way_id", "street", "city", "end_node"}); err != nil {
+		if err := w.Write([]string{"osm_way_id", "street", "city", "end_node", "osm_way_street_name"}); err != nil {
 			return err
 		}
 	}
@@ -323,6 +326,7 @@ func (sc *Scraper) writeMetadataToCSV(affectedWays map[int64]osmwayTrafficData, 
 			info.getStreet(),
 			info.getCity(),
 			info.getEndNode(),
+			info.getOsmStreet(),
 		}
 		if err := w.Write(rec); err != nil {
 			return err

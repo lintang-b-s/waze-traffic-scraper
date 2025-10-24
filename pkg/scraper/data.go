@@ -99,11 +99,12 @@ func NewEdgesWithDistance(edge datastructure.Edge, dist float64) edgesWithDistan
 }
 
 type osmwayTrafficData struct {
-	id       int64
-	speedKMH float64
-	street   string
-	city     string
-	endNode  string
+	id        int64
+	speedKMH  float64
+	street    string
+	city      string
+	endNode   string
+	osmStreet string
 }
 
 func (o osmwayTrafficData) getSpeed() float64 {
@@ -111,6 +112,11 @@ func (o osmwayTrafficData) getSpeed() float64 {
 }
 
 func (o osmwayTrafficData) getStreet() string {
+	return o.street
+}
+
+
+func (o osmwayTrafficData) getOsmStreet() string {
 	return o.street
 }
 
@@ -123,6 +129,6 @@ func (o osmwayTrafficData) getEndNode() string {
 }
 
 func NewOsmWayTrafficData(id int64, speedKMH float64,
-	street string, city string, endNode string) osmwayTrafficData {
-	return osmwayTrafficData{id, speedKMH, street, city, endNode}
+	street string, city string, endNode, osmStreet string) osmwayTrafficData {
+	return osmwayTrafficData{id, speedKMH, street, city, endNode, osmStreet}
 }

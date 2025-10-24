@@ -10,6 +10,7 @@ type Edge struct {
 	osmWayId         int64
 	highwayType      int
 	speed            float64
+	street           int
 }
 
 func (e *Edge) GetFromLonLat() (float64, float64) {
@@ -36,8 +37,12 @@ func (e *Edge) GetSpeed() float64 {
 	return e.speed
 }
 
-func NewEdge(fromLat, fromLon, toLat, toLon float64, edgeId uint32, bidirectional bool, osmWayId int64, highwayType string, 
-	speed float64) Edge {
+func (e *Edge) GetStreet() int {
+	return e.street
+}
+
+func NewEdge(fromLat, fromLon, toLat, toLon float64, edgeId uint32, bidirectional bool, osmWayId int64, highwayType string,
+	speed float64, street int) Edge {
 	var highwayTypeInt = INVALID_HIGHWAY_TYPE
 	switch highwayType {
 	case "motorway":
@@ -71,6 +76,7 @@ func NewEdge(fromLat, fromLon, toLat, toLon float64, edgeId uint32, bidirectiona
 		bidirectional: bidirectional,
 		osmWayId:      osmWayId,
 		highwayType:   highwayTypeInt,
-		speed: speed,
+		speed:         speed,
+		street:        street,
 	}
 }

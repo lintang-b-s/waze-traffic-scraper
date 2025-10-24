@@ -5,9 +5,8 @@ type IDMap struct {
 	IDToStr map[int]string
 }
 
-
-func NewIdMap() IDMap {
-	return IDMap{
+func NewIdMap() *IDMap {
+	return &IDMap{
 		StrToID: make(map[string]int),
 		IDToStr: make(map[int]string),
 	}
@@ -29,7 +28,3 @@ func (idMap *IDMap) GetStr(id int) string {
 	}
 	return ""
 }
-
-
-
-

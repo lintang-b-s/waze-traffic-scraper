@@ -30,8 +30,8 @@ func main() {
 	arcs, waySpeed := osmParser.Parse("./data/diy_solo_semarang.osm.pbf", logger)
 	rt := spatialindex.NewRtree()
 	rt.Build(arcs, 0.05, logger)
-	scp := scraper.NewScraper(3000*time.Millisecond, 3*time.Millisecond, 81*time.Millisecond, 20*time.Second,
-		10*time.Millisecond, 2, wazeUrl, 5, rt, logger, waySpeed)
+	scp := scraper.NewScraper(4000*time.Millisecond, 3*time.Millisecond, 81*time.Millisecond, 20*time.Second,
+		10*time.Millisecond, 2, wazeUrl, 5, rt, logger, waySpeed, osmParser.GetStreetIdMap())
 	err = scp.ScrapePeriodically("./data/waze_traffic_diy_solo_semarang.csv", "./data/waze_metadata_diy_solo_semarang.csv")
 	if err != nil {
 		panic(err)

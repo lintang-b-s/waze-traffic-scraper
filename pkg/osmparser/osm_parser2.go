@@ -43,12 +43,13 @@ type OsmParser struct {
 	acceptedNodeMap   map[int64]nodeCoord
 	barrierNodes      map[int64]bool
 	nodeTag           map[int64]map[int]int
-	tagStringIdMap    util.IDMap
+	tagStringIdMap    *util.IDMap
 	nodeIDMap         map[int64]uint32
 	nodeToOsmId       map[uint32]int64
 	maxNodeID         int64
 	restrictions      map[int64][]restriction // wayId -> list of restrictions
 	ways              map[int64]osmWay
+	streetNameIdMap   *util.IDMap
 }
 
 func NewOSMParserV2() *OsmParser {
@@ -61,10 +62,15 @@ func NewOSMParserV2() *OsmParser {
 		tagStringIdMap:    util.NewIdMap(),
 		nodeIDMap:         make(map[int64]uint32),
 		nodeToOsmId:       make(map[uint32]int64),
+		streetNameIdMap:   util.NewIdMap(),
 	}
 }
-func (o *OsmParser) GetTagStringIdMap() util.IDMap {
+func (o *OsmParser) GetTagStringIdMap() *util.IDMap {
 	return o.tagStringIdMap
+}
+
+func (o *OsmParser) GetStreetIdMap() *util.IDMap {
+	return o.streetNameIdMap
 }
 
 func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) ([]datastructure.Edge, map[int64]float64) {
@@ -509,6 +515,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 				id,
 				wayExtraInfoData.highwayType,
 				speed,
+				p.streetNameIdMap.GetID(tempMap[STREET_NAME]),
 			))
 
 		} else {
@@ -526,6 +533,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 				id,
 				wayExtraInfoData.highwayType,
 				speed,
+				p.streetNameIdMap.GetID(tempMap[STREET_NAME]),
 			))
 		}
 	} else {
@@ -543,6 +551,7 @@ func (p *OsmParser) addEdge(segment []node, tempMap map[string]string, speed flo
 			id,
 			wayExtraInfoData.highwayType,
 			speed,
+			p.streetNameIdMap.GetID(tempMap[STREET_NAME]),
 		))
 
 	}
