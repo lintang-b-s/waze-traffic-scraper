@@ -12,10 +12,12 @@ import (
 )
 
 var (
-	bbBottomLon = flag.Float64("bLon", 110.132, "traffic bounding box: bottom longitude")
-	bbBottomLat = flag.Float64("bLat", -8.2618, "traffic bounding box: bottom latitude")
-	bbTopLon    = flag.Float64("tLon", 110.9221, "traffic bounding box: bottom latitude")
-	bbTopLat    = flag.Float64("tLat", -6.888, "traffic bounding box: bottom latitude")
+	bbBottomLon    = flag.Float64("bLon", 110.132, "traffic bounding box: bottom longitude")
+	bbBottomLat    = flag.Float64("bLat", -8.2618, "traffic bounding box: bottom latitude")
+	bbTopLon       = flag.Float64("tLon", 110.9221, "traffic bounding box: bottom latitude")
+	bbTopLat       = flag.Float64("tLat", -6.888, "traffic bounding box: bottom latitude")
+	osmFile        = flag.String("osm", "./data/diy_solo_semarang.osm.pbf", "path to osm pbf file")
+	outputFileName = flag.String("out", "diy_solo_semarang", "traffic output file name")
 )
 
 func main() {
@@ -27,12 +29,13 @@ func main() {
 	osmParser := osmparser.NewOSMParserV2()
 	wazeUrl := fmt.Sprintf(`https://www.waze.com/live-map/api/georss?top=%.4f&bottom=%.4f&&left=%.4f&&right=%.4f&&env=row&types=traffic`, *bbTopLat, *bbBottomLat, *bbBottomLon, *bbTopLon)
 
-	arcs, waySpeed := osmParser.Parse("./data/diy_solo_semarang.osm.pbf", logger)
+	arcs, waySpeed := osmParser.Parse(*osmFile, logger)
 	rt := spatialindex.NewRtree()
 	rt.Build(arcs, 0.05, logger)
 	scp := scraper.NewScraper(4000*time.Millisecond, 3*time.Millisecond, 81*time.Millisecond, 20*time.Second,
 		10*time.Millisecond, 2, wazeUrl, 5, rt, logger, waySpeed, osmParser.GetStreetIdMap())
-	err = scp.ScrapePeriodically("./data/waze_traffic_diy_solo_semarang.csv", "./data/waze_metadata_diy_solo_semarang.csv")
+	err = scp.ScrapePeriodically(fmt.Sprintf("./data/waze_traffic_%s.csv", *outputFileName),
+		fmt.Sprintf("./data/waze_metadata_%s.csv", *outputFileName))
 	if err != nil {
 		panic(err)
 	}
