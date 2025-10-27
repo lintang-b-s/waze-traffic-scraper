@@ -33,12 +33,14 @@ type restriction struct {
 }
 
 type osmWay struct {
-	nodes  []uint32
+	id     int64
+	nodes  []int64
 	oneWay bool
 }
 
 type OsmParser struct {
 	wayNodeMap        map[int64]NodeType
+	wayMap            map[int64]datastructure.Way
 	relationMemberMap map[int64]struct{}
 	acceptedNodeMap   map[int64]nodeCoord
 	barrierNodes      map[int64]bool
@@ -63,6 +65,7 @@ func NewOSMParserV2() *OsmParser {
 		nodeIDMap:         make(map[int64]uint32),
 		nodeToOsmId:       make(map[uint32]int64),
 		streetNameIdMap:   util.NewIdMap(),
+		wayMap:            make(map[int64]datastructure.Way),
 	}
 }
 func (o *OsmParser) GetTagStringIdMap() *util.IDMap {
@@ -71,6 +74,10 @@ func (o *OsmParser) GetTagStringIdMap() *util.IDMap {
 
 func (o *OsmParser) GetStreetIdMap() *util.IDMap {
 	return o.streetNameIdMap
+}
+
+func (o *OsmParser) GetWayMap() map[int64]datastructure.Way {
+	return o.wayMap
 }
 
 func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) ([]datastructure.Edge, map[int64]float64) {
@@ -177,14 +184,15 @@ func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) ([]datastructure.E
 				} else {
 					wayExtraInfoData.forward = true
 				}
-				wNodes := make([]uint32, 0, len(way.Nodes))
+				wNodes := make([]int64, 0, len(way.Nodes))
 				for _, node := range way.Nodes {
-					nodeID := p.nodeIDMap[int64(node.ID)]
-					wNodes = append(wNodes, nodeID)
+					nodeId := node.ID
+					wNodes = append(wNodes, int64(nodeId))
 				}
 				p.ways[int64(way.ID)] = osmWay{
 					nodes:  wNodes,
 					oneWay: wayExtraInfoData.oneWay,
+					id:     int64(way.ID),
 				}
 			}
 		case osm.TypeNode:
@@ -234,6 +242,16 @@ func (p *OsmParser) Parse(mapFile string, logger *zap.Logger) ([]datastructure.E
 
 	for _, edge := range scannedEdges {
 		waySpeed[edge.GetOsmWayId()] = edge.GetSpeed()
+	}
+
+	for _, way := range p.ways {
+		wCoords := make([]datastructure.Coordinate, 0)
+		for _, nodeId := range way.nodes {
+			node := p.acceptedNodeMap[int64(nodeId)]
+			wCoords = append(wCoords, datastructure.NewCoordinate(node.lon,
+				node.lat))
+		}
+		p.wayMap[way.id] = datastructure.NewWay(way.id, wCoords)
 	}
 
 	return scannedEdges, waySpeed

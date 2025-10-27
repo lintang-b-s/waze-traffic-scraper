@@ -15,6 +15,7 @@ import (
 
 	"github.com/gojek/heimdall/v7"
 	"github.com/gojek/heimdall/v7/httpclient"
+	"github.com/lintang-b-s/waze-traffic-scraper/pkg/datastructure"
 	"github.com/lintang-b-s/waze-traffic-scraper/pkg/geo"
 	"github.com/lintang-b-s/waze-traffic-scraper/pkg/spatialindex"
 	"github.com/lintang-b-s/waze-traffic-scraper/pkg/util"
@@ -34,11 +35,12 @@ type Scraper struct {
 	log                   *zap.Logger
 	osmWayDefaultSpeed    map[int64]float64
 	streetIdMap           *util.IDMap
+	wayMap                map[int64]datastructure.Way
 }
 
 func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitterInterval time.Duration,
 	exponentFactor float64, url string, retryCount int, rt *spatialindex.Rtree, log *zap.Logger, waySpeed map[int64]float64,
-	streetIdMap *util.IDMap) *Scraper {
+	streetIdMap *util.IDMap, wayMap map[int64]datastructure.Way) *Scraper {
 	return &Scraper{
 		initialTimeout:        initialTimeout,
 		maxTimeout:            maxTimeout,
@@ -52,6 +54,7 @@ func NewScraper(requestTimeout, initialTimeout, maxTimeout, period, maximumJitte
 		osmWayDefaultSpeed:    waySpeed,
 		period:                period,
 		streetIdMap:           streetIdMap,
+		wayMap:                wayMap,
 	}
 }
 
@@ -139,7 +142,29 @@ func (sc *Scraper) ScrapePeriodically(trafficCsvFilePath, metadataCsvFilePath st
 	}
 }
 
-func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, metadataCsvFilePath string) error {
+func (sc *Scraper) Scrape() ([]datastructure.WayTraffic, error) {
+
+	data, err := sc.scrape()
+	if err != nil {
+		return []datastructure.WayTraffic{}, err
+	}
+	affectedWays := sc.GetAffectedWays(data)
+
+	result := make([]datastructure.WayTraffic, 0, len(affectedWays))
+	for osmWayId, trafficData := range affectedWays {
+		way, exists := sc.wayMap[osmWayId]
+		if !exists {
+			continue
+		}
+		result = append(result, datastructure.NewWayTraffic(
+			way,
+			trafficData.getSpeed(),
+		))
+	}
+	return result, nil
+}
+
+func (sc *Scraper) GetAffectedWays(data wazeResponse) map[int64]osmwayTrafficData {
 	affectedWays := make(map[int64]osmwayTrafficData)
 	for _, jam := range data.Jams {
 		if jam.CauseAlert.Type != "" || jam.BlockType != "" { // skip road segment block event
@@ -147,7 +172,7 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 		}
 		for _, coord := range jam.Line {
 			edges := sc.rt.SearchWithinRadius(coord.Longitude, coord.Latitude,
-				0.15) // 150 meters radius
+				0.025) // 25 meters radius
 			if len(edges) == 0 {
 				continue
 			}
@@ -172,7 +197,11 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 			)
 		}
 	}
+	return affectedWays
+}
 
+func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, metadataCsvFilePath string) error {
+	affectedWays := sc.GetAffectedWays(data)
 	// traffic speed data
 	err := sc.writeTrafficSpeedDataToCSV(affectedWays, trafficCsvFilePath)
 	if err != nil {
@@ -184,7 +213,6 @@ func (sc *Scraper) writeTrafficDataToCSV(data wazeResponse, trafficCsvFilePath, 
 
 func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTrafficData, trafficCsvFilePath string) error {
 	var headers []string
-	var records [][]string
 
 	fileExists := false
 	if _, err := os.Stat(trafficCsvFilePath); err == nil {
@@ -196,13 +224,12 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 		if err != nil {
 			return err
 		}
+		defer f.Close()
 		r := csv.NewReader(f)
-		records, err = r.ReadAll()
-		f.Close()
+		headers, err = r.Read()
 		if err != nil {
 			return err
 		}
-		headers = records[0]
 	} else {
 		headers = []string{"timestamp"}
 	}
@@ -234,8 +261,9 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 		}
 	}
 
-	records = append(records, row)
-	f, err := os.Create(trafficCsvFilePath)
+	timestamp := time.Now().Format("20060102_150405")
+	newFileName := fmt.Sprintf("%s.%s.csv", trafficCsvFilePath, timestamp)
+	f, err := os.Create(newFileName)
 	if err != nil {
 		return err
 	}
@@ -247,27 +275,52 @@ func (sc *Scraper) writeTrafficSpeedDataToCSV(affectedWays map[int64]osmwayTraff
 	if err := w.Write(headers); err != nil {
 		return err
 	}
-	startId := 0
-	if len(records) > 1 {
-		startId = 1
-	}
-	for _, rec := range records[startId:] {
-		if len(row) > len(rec) {
-			oldId := len(rec)
-			rec = append(rec, make([]string, len(row)-len(rec))...)
 
-			for i := oldId; i < len(row); i++ {
-				// isi pakai default speed value...
-				h := headers[i]
-				osmWayId, _ := strconv.ParseInt(h, 10, 64)
-				rec[i] = fmt.Sprintf("%.2f", sc.osmWayDefaultSpeed[osmWayId])
-			}
-
-		}
-
-		if err := w.Write(rec); err != nil {
+	if fileExists {
+		oldF, err := os.Open(trafficCsvFilePath)
+		if err != nil {
 			return err
 		}
+		defer oldF.Close()
+		r := csv.NewReader(oldF)
+		_, _ = r.Read() // skip header
+		for {
+			rec, err := r.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if len(headers) > len(rec) {
+				oldLen := len(rec)
+				rec = append(rec, make([]string, len(headers)-len(rec))...)
+				for i := oldLen; i < len(headers); i++ {
+					h := headers[i]
+					if h == "timestamp" {
+						continue
+					}
+					osmWayId, _ := strconv.ParseInt(h, 10, 64)
+					rec[i] = fmt.Sprintf("%.2f", sc.osmWayDefaultSpeed[osmWayId])
+				}
+			}
+
+			if err := w.Write(rec[:len(headers)]); err != nil {
+				return err
+			}
+		}
+	}
+	if err := w.Write(row); err != nil {
+		return err
+	}
+
+	if fileExists {
+		if err := os.Remove(trafficCsvFilePath); err != nil {
+			return err
+		}
+	}
+	if err := os.Rename(newFileName, trafficCsvFilePath); err != nil {
+		return err
 	}
 	return nil
 }
